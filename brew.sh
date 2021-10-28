@@ -45,6 +45,11 @@ brew install openssh
 brew install screen
 brew install php
 brew install gmp
+brew install ruby
+
+# Install jekyll
+gem install --user-install bundler jekyll
+
 
 # Install font tools.
 brew tap bramstein/webfonttools

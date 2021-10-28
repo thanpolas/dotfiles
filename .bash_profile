@@ -1,20 +1,27 @@
-# Add `~/bin` to the `$PATH`
-export PATH="$HOME/bin:$PATH";
+# Add `~/bin` and ruby to the `$PATH`
+export PATH="$HOME/bin:$HOME/.local/share/gem/ruby/3.0.0/bin:$PATH";
 
 # Add homebrew path
 if [ ${SHELL} = "/opt/homebrew/bin/bash" ]; then
+  export PATH="$HOME/bin:/opt/homebrew/opt/ruby/bin:/opt/homebrew/lib/ruby/gems/3.0.0/bin:$PATH";
   eval "$(/opt/homebrew/bin/brew shellenv)";
 else
+  export PATH="$HOME/bin:/usr/local/opt/ruby/bin:/usr/local/lib/ruby/gems/3.0.0/bin:$PATH";
   eval "$(/usr/local/bin/brew shellenv)";
 fi;
+
+# Add default node to path
+export PATH=~/.nvm/versions/node/v16.12.0/bin:$PATH
 
 # Add RVM to PATH for scripting. Make sure this is the last PATH variable change.
 export PATH="$PATH:$HOME/.rvm/bin"
 
-# export NVM_DIR="$HOME/.nvm"
+# Starting on macOS Catalina (10.15) the headers used for Ruby have been moved
+# from their previous location which results in some gems, including Jekyll to
+# fail installation. This can be solved by setting SDKROOT in your shell
+# configuration to the value provided by xcrun.
+export SDKROOT=$(xcrun --show-sdk-path)
 
-# Add default node to path
-export PATH=~/.nvm/versions/node/v16.12.0/bin:$PATH
 
 # This loads nvm
 # [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
