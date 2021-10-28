@@ -14,7 +14,7 @@ export PATH="$PATH:$HOME/.rvm/bin"
 # export NVM_DIR="$HOME/.nvm"
 
 # Add default node to path
-export PATH=~/.nvm/versions/node/v14.18.1/bin:$PATH
+export PATH=~/.nvm/versions/node/v16.12.0/bin:$PATH
 
 # This loads nvm
 # [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
