@@ -47,6 +47,10 @@ brew install php
 brew install gmp
 brew install ruby
 
+# Install jekyll
+gem install --user-install bundler jekyll
+
+
 # Install font tools.
 brew tap bramstein/webfonttools
 brew install sfnt2woff
