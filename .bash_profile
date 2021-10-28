@@ -1,5 +1,5 @@
 # Add `~/bin` and ruby to the `$PATH`
-export PATH="$HOME/bin:$PATH";
+export PATH="$HOME/bin:$HOME/.local/share/gem/ruby/3.0.0/bin:$PATH";
 
 # Add homebrew path
 if [ ${SHELL} = "/opt/homebrew/bin/bash" ]; then
