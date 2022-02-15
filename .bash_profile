@@ -10,9 +10,6 @@ else
   eval "$(/usr/local/bin/brew shellenv)";
 fi;
 
-# Add default node to path
-export PATH=~/.nvm/versions/node/v16.12.0/bin:$PATH
-
 # Add RVM to PATH for scripting. Make sure this is the last PATH variable change.
 export PATH="$PATH:$HOME/.rvm/bin"
 
