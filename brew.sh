@@ -120,7 +120,9 @@ brew install pinentry-mac
 # Heroku
 brew tap heroku/brew && brew install heroku
 
-
+# Thanpolas set
+brew install watch
+brew install pup
 
 # Remove outdated versions from the cellar.
 brew cleanup
