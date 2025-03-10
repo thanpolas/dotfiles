@@ -1,5 +1,19 @@
 #!/usr/bin/env bash
 
+function getblock() {
+  local block_number=${1}
+  local encoding=${2:-json}
+  curl $QUICKNODE_RPC -X POST -H "Content-Type: application/json" \
+    --data "{\"jsonrpc\": \"2.0\",\"id\":1,\"method\":\"getBlock\",\"params\":[${block_number}, {\"encoding\": \"${encoding}\",\"maxSupportedTransactionVersion\":0,\"transactionDetails\":\"full\"}]}"
+}
+
+function gettx() {
+  local tx_id=${1}
+  local encoding=${2:-json}
+  curl $QUICKNODE_RPC -X POST -H "Content-Type: application/json" \
+    --data "{\"jsonrpc\": \"2.0\",\"id\":1,\"method\":\"getTransaction\",\"params\":[\"${tx_id}\", {\"encoding\": \"${encoding}\",\"maxSupportedTransactionVersion\":0}]}"
+}
+
 # Create a new directory and enter it
 function mkd() {
 	mkdir -p "$@" && cd "$_";
