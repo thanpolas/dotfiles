@@ -22,7 +22,22 @@ function decodedb() {
     echo "Usage: decodedb <hash_value>"
     return 1
   fi
-  node -e "const { dbBinaryDecode } = require('./app/utils/token-utils.js'); const hexString = '${hash_value}'; const buffer = Buffer.from(hexString, 'hex'); console.log(dbBinaryDecode(buffer));"
+  # Check if bs58 is installed globally
+  if ! npm list -g bs58 >/dev/null 2>&1; then
+    echo "Installing bs58 globally..."
+    npm install -g bs58
+  fi
+  # Get the global node_modules path
+  local global_modules=$(npm root -g)
+  # Export NODE_PATH to ensure it's available to the node process
+  export NODE_PATH="$global_modules"
+
+  node -e "
+    const {default: bs58} = require('bs58');
+    const hexString = '${hash_value}';
+    const buffer = Buffer.from(hexString, 'hex');
+    console.log(bs58.encode(buffer));
+  "
 }
 
 # Create a new directory and enter it
