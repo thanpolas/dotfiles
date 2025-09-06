@@ -16,7 +16,7 @@ function gettx() {
 
 # Used for decoding binary addresses and transaction hashes when stored
 # as binary in the database.
-function decodedb() {
+function dbdecode() {
   local hash_value=${1}
   if [ -z "$hash_value" ]; then
     echo "Usage: decodedb <hash_value>"
@@ -37,6 +37,41 @@ function decodedb() {
     const hexString = '${hash_value}';
     const buffer = Buffer.from(hexString, 'hex');
     console.log(bs58.encode(buffer));
+  "
+}
+
+# Used for encoding binary addresses and transaction hashes when stored
+# as binary in the database.
+function dbencode() {
+  local address=${1}
+  if [ -z "$address" ]; then
+    echo "Usage: dbencode <address>"
+    return 1
+  fi
+  # Check if bs58 is installed globally
+  if ! npm list -g bs58 >/dev/null 2>&1; then
+    echo "Installing bs58 globally..."
+    npm install -g bs58
+  fi
+  # Check if @solana/web3.js is installed globally
+  if ! npm list -g @solana/web3.js >/dev/null 2>&1; then
+    echo "Installing @solana/web3.js globally..."
+    npm install -g @solana/web3.js
+  fi
+
+  # Get the global node_modules path
+  local global_modules=$(npm root -g)
+  # Export NODE_PATH to ensure it's available to the node process
+  export NODE_PATH="$global_modules"
+
+  node -e "
+    const {default: bs58} = require('bs58');
+    const { PublicKey } = require('@solana/web3.js');
+    const address = '${address}';
+
+    const pubkey = new PublicKey(address);
+    const buffer = Buffer.from(pubkey.toBytes()).toString('hex');
+    console.log(buffer);
   "
 }
 
