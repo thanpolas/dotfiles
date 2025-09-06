@@ -256,7 +256,7 @@ function transcribe() {
   fi
 
   whisper-cpp \
-    -m ~/whisper-models/ggml-medium.bin \
+    -m ~/tiktok/whisper-models/ggml-medium.bin \
     -f "$input_file" \
     -l el \
     -t 8 \
