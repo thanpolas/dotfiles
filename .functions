@@ -244,3 +244,22 @@ function o() {
 function tre() {
 	tree -aC -I '.git|node_modules|bower_components' --dirsfirst "$@" | less -FRNX;
 }
+
+# Transcribe audio or video files using whisper.cpp
+function transcribe() {
+  local input_file=${1}
+  local output_file=${2:-output}
+
+  if [ -z "$input_file" ]; then
+    echo "Usage: transcribe <input_file> [output_file]"
+    return 1
+  fi
+
+  whisper-cpp \
+    -m ~/whisper-models/ggml-medium.bin \
+    -f "$input_file" \
+    -l el \
+    -t 8 \
+    -osrt \
+    -of "$output_file"
+}
