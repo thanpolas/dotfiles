@@ -13,6 +13,11 @@ else
   eval "$(/usr/local/bin/brew shellenv)";
 fi;
 
+# 21/Oct/2025 Add chruby config for jekyll
+source $(brew --prefix)/opt/chruby/share/chruby/chruby.sh
+source $(brew --prefix)/opt/chruby/share/chruby/auto.sh
+chruby ruby-3.2.2
+
 # Add RVM to PATH for scripting. Make sure this is the last PATH variable change.
 export PATH="$PATH:$HOME/.rvm/bin"
 
