@@ -263,3 +263,57 @@ function transcribe() {
     -osrt \
     -of "$output_file"
 }
+
+# Transcribe any video file by extracting audio first (debug-friendly)
+function transcribe_vid() {
+  local input_video="${1}"
+  local output_base="${2:-output}"
+
+  if [ -z "$input_video" ]; then
+    echo "❗ Usage: transcribe_vid <video_file> [output_base]"
+    return 1
+  fi
+
+  # Use only the filename part of output_base for /tmp audio
+  local output_stem
+  output_stem="$(basename "${output_base}")"
+  local tmp_audio="/tmp/${output_stem}_audio.wav"
+
+  # Ensure the output directory (if any) exists for the .srt
+  local out_dir
+  out_dir="$(dirname "${output_base}")"
+  if [ "${out_dir}" != "." ]; then
+    echo "📁 Ensuring output directory exists: ${out_dir}"
+    mkdir -p "${out_dir}" || { echo "💥 Failed to create output directory."; return 1; }
+  fi
+
+  echo "🎬 Input video: ${input_video}"
+  echo "🎯 Output base: ${output_base}"
+  echo "🗂  Temp audio: ${tmp_audio}"
+  echo "---------------------------"
+
+  # Step 1: Extract audio (show full command + logs)
+  echo "🎧 Extracting audio from video..."
+  echo "⚙️  Running command:"
+  echo "ffmpeg -y -i \"${input_video}\" -vn -acodec pcm_s16le -ar 16000 -ac 1 \"${tmp_audio}\""
+  ffmpeg -y -i "${input_video}" -vn -acodec pcm_s16le -ar 16000 -ac 1 "${tmp_audio}"  >/dev/null 2>&1
+  if [ $? -ne 0 ]; then
+    echo "💥 Failed to extract audio."
+    return 1
+  fi
+  echo "✅ Audio extracted: ${tmp_audio}"
+
+  # Step 2: Transcribe using whisper.cpp wrapper
+  echo "🧠 Transcribing with Whisper..."
+  transcribe "${tmp_audio}" "${output_base}"
+  if [ $? -ne 0 ]; then
+    echo "💥 Transcription failed."
+    rm -f "${tmp_audio}"
+    return 1
+  fi
+  echo "✅ Transcription complete: ${output_base}.srt"
+
+  # Step 3: Clean up
+  echo "🧹 Cleaning up temporary audio..."
+  rm -f "${tmp_audio}" && echo "✅ Done!"
+}
