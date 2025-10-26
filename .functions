@@ -317,3 +317,42 @@ function transcribe_vid() {
   echo "🧹 Cleaning up temporary audio..."
   rm -f "${tmp_audio}" && echo "✅ Done!"
 }
+
+
+function transcribe_batchshow_usage() {
+    echo "Usage: transcribe_batch"
+    echo "Reads a list of video filenames from stdin and transcribes them using transcribe_vid"
+    echo "Example: cat video_list.txt | transcribe_batch"
+    echo
+    echo "Options:"
+    echo "  -h    Show this help message"
+}
+
+function transcribe_batch() {
+    # Handle command line arguments
+    if [[ "$1" == "-h" ]]; then
+        transcribe_batchshow_usage
+        return 0
+    fi
+
+    # Check if stdin is empty
+    if [ ! -t 0 ]; then
+        while IFS= read -r line; do
+            # Skip empty lines
+            [ -z "$line" ] && continue
+
+            # Get filename without extension
+            filename_no_ext="${line%.*}"
+
+            # Escape the input and output paths
+            input_path=$(printf "%q" "./$line")
+            output_path=$(printf "%q" "../Subtitles/$filename_no_ext")
+
+            # Execute the transcribe command
+            eval "transcribe_vid $input_path $output_path"
+        done
+    else
+        transcribe_batchshow_usage
+        return 1
+    fi
+}
