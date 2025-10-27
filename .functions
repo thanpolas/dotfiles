@@ -264,6 +264,31 @@ function transcribe() {
     -of "$output_file"
 }
 
+# Extract audio from video file using ffmpeg
+function extract_audio() {
+  local input_video="${1}"
+  local output_audio="${2:-output_audio.wav}"
+
+  if [ -z "$input_video" ]; then
+    echo "❗ Usage: extract_audio <video_file> [output_audio]"
+    return 1
+  fi
+
+  echo "🎧 Extracting audio from video..."
+
+  ffmpeg -y -i "${input_video}" \
+    -af "silenceremove=start_periods=0:stop_periods=-1:stop_threshold=-30dB:detection=peak,aresample=16000" \
+    -ar 16000 -ac 1 -acodec pcm_s16le "${output_audio}"
+
+  if [ $? -ne 0 ]; then
+    echo "💥 Failed to extract audio."
+    return 1
+  fi
+
+  echo "✅ Audio extracted successfully: ${output_audio}"
+}
+
+
 # Transcribe any video file by extracting audio first (debug-friendly)
 function transcribe_vid() {
   local input_video="${1}"
@@ -292,11 +317,9 @@ function transcribe_vid() {
   echo "🗂  Temp audio: ${tmp_audio}"
   echo "---------------------------"
 
-  # Step 1: Extract audio (show full command + logs)
-  echo "🎧 Extracting audio from video..."
-  echo "⚙️  Running command:"
-  echo "ffmpeg -y -i \"${input_video}\" -vn -acodec pcm_s16le -ar 16000 -ac 1 \"${tmp_audio}\""
-  ffmpeg -y -i "${input_video}" -vn -acodec pcm_s16le -ar 16000 -ac 1 "${tmp_audio}"  >/dev/null 2>&1
+  # Step 1: Extract audio (show full command + logs) - use extract_audio function
+  extract_audio "${input_video}" "${tmp_audio}"
+
   if [ $? -ne 0 ]; then
     echo "💥 Failed to extract audio."
     return 1
