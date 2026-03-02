@@ -255,7 +255,7 @@ function transcribe() {
     return 1
   fi
 
-  whisper-cpp \
+  whisper-cli \
     -m ~/tiktok/whisper-models/ggml-medium.bin \
     -f "$input_file" \
     -l el \
@@ -379,3 +379,101 @@ function transcribe_batch() {
         return 1
     fi
 }
+
+# Transcribe MP3 files to subtitles
+function transcribe_mp3() {
+  local input_audio="${1}"
+  local output_base="${2:-output}"
+
+  if [ -z "$input_audio" ]; then
+    echo "❗ Usage: transcribe_mp3 <audio_file> [output_base]"
+    return 1
+  fi
+
+  # Use only the filename part of output_base for /tmp audio
+  local output_stem
+  output_stem="$(basename "${output_base}")"
+  local tmp_audio="/tmp/${output_stem}_converted.wav"
+  local duration_seconds
+
+  # Ensure the output directory (if any) exists for the .srt
+  local out_dir
+  out_dir="$(dirname "${output_base}")"
+  if [ "${out_dir}" != "." ]; then
+    echo "📁 Ensuring output directory exists: ${out_dir}"
+    mkdir -p "${out_dir}" || { echo "💥 Failed to create output directory."; return 1; }
+  fi
+
+  echo "🎵 Input audio: ${input_audio}"
+  echo "🎯 Output base: ${output_base}"
+  echo "---------------------------"
+
+  # Get audio duration in seconds
+  duration_seconds=$(ffprobe -i "${input_audio}" -show_entries format=duration -v quiet -of csv="p=0")
+  duration_minutes=$(echo "${duration_seconds}/60" | bc)
+  echo "📊 Audio duration: ${duration_minutes} minutes"
+
+  # If longer than 10 minutes, split into chunks
+  if (( $(echo "${duration_seconds} > 600" | bc -l) )); then
+    echo "🔄 Long audio detected, processing in chunks..."
+
+    # Create temporary directory for chunks
+    local chunks_dir="/tmp/${output_stem}_chunks"
+    mkdir -p "${chunks_dir}"
+
+    # Split audio into 10-minute segments
+    ffmpeg -i "${input_audio}" -f segment -segment_time 600 \
+      -c copy "${chunks_dir}/chunk_%03d.mp3" >/dev/null 2>&1
+
+    # Process each chunk
+    local chunk_count=0
+    for chunk in "${chunks_dir}"/chunk_*.mp3; do
+      echo "🎵 Processing chunk $((++chunk_count))..."
+
+      # Convert chunk to WAV
+      local chunk_wav="${chunks_dir}/chunk_${chunk_count}.wav"
+      ffmpeg -y -i "${chunk}" -ar 16000 -ac 1 -acodec pcm_s16le "${chunk_wav}" >/dev/null 2>&1
+
+      # Transcribe chunk
+      local chunk_output="${chunks_dir}/chunk_${chunk_count}"
+      transcribe "${chunk_wav}" "${chunk_output}"
+
+      # Clean up chunk WAV
+      rm -f "${chunk_wav}"
+    done
+
+    # Combine all SRT files
+    echo "🔄 Combining subtitle chunks..."
+    cat "${chunks_dir}"/*.srt > "${output_base}.srt"
+
+    # Clean up
+    rm -rf "${chunks_dir}"
+
+  else
+    # Convert MP3 to WAV with proper format for Whisper
+    echo "🎧 Converting MP3 to WAV..."
+    ffmpeg -y -i "${input_audio}" \
+      -ar 16000 -ac 1 -acodec pcm_s16le "${tmp_audio}" >/dev/null 2>&1
+
+    if [ $? -ne 0 ]; then
+      echo "💥 Failed to convert audio."
+      return 1
+    fi
+
+    # Transcribe using whisper.cpp wrapper
+    echo "🧠 Transcribing with Whisper..."
+    transcribe "${tmp_audio}" "${output_base}"
+    if [ $? -ne 0 ]; then
+      echo "💥 Transcription failed."
+      rm -f "${tmp_audio}"
+      return 1
+    fi
+
+    # Clean up
+    rm -f "${tmp_audio}"
+  fi
+
+  echo "✅ Transcription complete: ${output_base}.srt"
+}
+
+
