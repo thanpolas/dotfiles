@@ -2,7 +2,9 @@
 export PATH="$HOME/bin:$HOME/.local/share/gem/ruby/3.0.0/bin:/Users/thanpolas/.foundry/bin:$PATH";
 
 # Solana executable path
-export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH";
+export PATH="$PATH:$HOME/.local/share/solana/install/active_release/bin";
+
+export PATH="$PATH:/Users/thanpolas/.bun/bin"
 
 # Add homebrew path
 if [ ${SHELL} = "/opt/homebrew/bin/bash" ]; then
