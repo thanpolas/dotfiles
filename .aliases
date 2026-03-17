@@ -6,7 +6,7 @@ alias ...="cd ../.."
 alias ....="cd ../../.."
 alias .....="cd ../../../.."
 alias ~="cd ~" # `cd` is probably faster to type though
-alias -- -="cd -"
+# alias -- -="cd -"  # Removed: causes snapshot parse errors in Claude Code bash shells
 
 # Shortcuts
 alias d="cd ~/Documents/Dropbox"
