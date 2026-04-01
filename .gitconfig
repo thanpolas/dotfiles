@@ -98,6 +98,8 @@
   br = branch
   lol = log --graph --decorate --pretty=oneline --abbrev-commit
   lola = log --graph --decorate --pretty=oneline --abbrev-commit --all
+  # Delete all local branches except main
+  brd = "!git checkout main && git branch | grep -v '\\* main' | xargs -n 1 git branch -D"
 
 [apply]
 
