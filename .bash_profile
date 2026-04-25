@@ -4,6 +4,10 @@ export PATH="$HOME/bin:$HOME/.local/share/gem/ruby/3.0.0/bin:/Users/thanpolas/.f
 # Solana executable path
 export PATH="$PATH:$HOME/.local/share/solana/install/active_release/bin";
 
+# Codex execution path
+export PATH="$PATH:/Applications/Codex.app/Contents/Resources"
+
+# Bun
 export PATH="$PATH:/Users/thanpolas/.bun/bin"
 
 # Add homebrew path
