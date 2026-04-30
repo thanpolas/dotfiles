@@ -341,6 +341,71 @@ function transcribe_vid() {
   rm -f "${tmp_audio}" && echo "✅ Done!"
 }
 
+# Transcribe audio or video files using whisper.cpp (English)
+function transcribe_en() {
+  local input_file=${1}
+  local output_file=${2:-output}
+
+  if [ -z "$input_file" ]; then
+    echo "Usage: transcribe_en <input_file> [output_file]"
+    return 1
+  fi
+
+  whisper-cli \
+    -m ~/tiktok/whisper-models/ggml-medium.bin \
+    -f "$input_file" \
+    -l en \
+    -t 8 \
+    -osrt \
+    -of "$output_file"
+}
+
+# Transcribe any video file by extracting audio first (English)
+function transcribe_vid_en() {
+  local input_video="${1}"
+  local output_base="${2:-output}"
+
+  if [ -z "$input_video" ]; then
+    echo "❗ Usage: transcribe_vid_en <video_file> [output_base]"
+    return 1
+  fi
+
+  local output_stem
+  output_stem="$(basename "${output_base}")"
+  local tmp_audio="/tmp/${output_stem}_audio.wav"
+
+  local out_dir
+  out_dir="$(dirname "${output_base}")"
+  if [ "${out_dir}" != "." ]; then
+    echo "📁 Ensuring output directory exists: ${out_dir}"
+    mkdir -p "${out_dir}" || { echo "💥 Failed to create output directory."; return 1; }
+  fi
+
+  echo "🎬 Input video: ${input_video}"
+  echo "🎯 Output base: ${output_base}"
+  echo "🗂  Temp audio: ${tmp_audio}"
+  echo "---------------------------"
+
+  extract_audio "${input_video}" "${tmp_audio}"
+  if [ $? -ne 0 ]; then
+    echo "💥 Failed to extract audio."
+    return 1
+  fi
+  echo "✅ Audio extracted: ${tmp_audio}"
+
+  echo "🧠 Transcribing with Whisper (English)..."
+  transcribe_en "${tmp_audio}" "${output_base}"
+  if [ $? -ne 0 ]; then
+    echo "💥 Transcription failed."
+    rm -f "${tmp_audio}"
+    return 1
+  fi
+  echo "✅ Transcription complete: ${output_base}.srt"
+
+  echo "🧹 Cleaning up temporary audio..."
+  rm -f "${tmp_audio}" && echo "✅ Done!"
+}
+
 
 function transcribe_batchshow_usage() {
     echo "Usage: transcribe_batch"
