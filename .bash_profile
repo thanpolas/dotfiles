@@ -10,6 +10,9 @@ export PATH="$PATH:/Applications/Codex.app/Contents/Resources"
 # Bun
 export PATH="$PATH:/Users/thanpolas/.bun/bin"
 
+# Google CLI
+export PATH="$PATH:/Users/thanpolas/Projects/clients/gcli/google-cloud-sdk/bin"
+
 # Add homebrew path
 if [ ${SHELL} = "/opt/homebrew/bin/bash" ]; then
   export PATH="$HOME/bin:/opt/homebrew/opt/ruby/bin:/opt/homebrew/lib/ruby/gems/3.0.0/bin:$PATH";
