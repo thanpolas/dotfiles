@@ -542,3 +542,33 @@ function transcribe_mp3() {
 }
 
 
+# Re-apply the Claude Code VSCode chat-panel CSS patch (block background on <pre>,
+# transparent child backgrounds, comfortable padding). The patch is wiped on every
+# extension auto-update (each version installs to its own dir). Idempotent: restores
+# from .bak first, then re-appends. Mirrors the `/vsc` Claude Code skill.
+function vsc() {
+  shopt -s nullglob
+  local dirs=(~/.vscode/extensions/anthropic.claude-code-*/)
+  if [ ${#dirs[@]} -eq 0 ]; then
+    echo "ERROR: anthropic.claude-code extension not found in ~/.vscode/extensions/"
+    return 1
+  fi
+  local ext_dir
+  ext_dir=$(printf '%s\n' "${dirs[@]%/}" | sort -V | tail -1)
+  local f="${ext_dir}/webview/index.css"
+  if [ ! -f "$f" ]; then
+    echo "ERROR: webview/index.css not found in ${ext_dir} (layout changed — check the /vsc skill)"
+    return 1
+  fi
+  if [ -f "$f.bak" ]; then cp "$f.bak" "$f"; else cp "$f" "$f.bak"; fi
+  cat >> "$f" <<'EOF'
+
+/* claude-code-chat-rendering-patch v1 */
+.codeBlockWrapper_-a7MRw pre, pre {background-color: var(--vscode-textCodeBlock-background, var(--vscode-textPreformat-background, rgba(127,127,127,0.15))) !important;}
+.codeBlockWrapper_-a7MRw pre code, .codeBlockWrapper_-a7MRw pre code *, pre code, pre code * {background-color: transparent !important; background: transparent !important;}
+pre {padding: 8px 12px !important;}
+EOF
+  echo "Patched: ${f}"
+  echo "Backup:  ${f}.bak"
+  echo "Reload VSCode: Cmd+Shift+P -> Developer: Reload Window"
+}
