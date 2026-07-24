@@ -36,16 +36,6 @@ export PATH="$PATH:$HOME/.rvm/bin"
 # configuration to the value provided by xcrun.
 export SDKROOT=$(xcrun --show-sdk-path)
 
-
-# This loads nvm
-# [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-# Load NVM
-export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
-
-# This loads nvm bash_completion
-[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
-
 # Suppress the "The default interactive shell is now zsh." OSX message
 export BASH_SILENCE_DEPRECATION_WARNING=1
 
@@ -107,3 +97,13 @@ if command -v brew >/dev/null 2>&1; then
 	# Load rupa's z if installed
 	[ -f $(brew --prefix)/etc/profile.d/z.sh ] && source $(brew --prefix)/etc/profile.d/z.sh
 fi
+
+# Load NVM last, after every other PATH mutation above (Homebrew's shellenv,
+# chruby, RVM, ~/.path, brew bash_completion, z) — nvm prepends its own bin
+# dir, so sourcing it last guarantees nvm's node always wins on PATH instead
+# of a Homebrew-installed node silently shadowing it.
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
+
+# This loads nvm bash_completion
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
