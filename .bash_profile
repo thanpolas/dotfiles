@@ -1,24 +1,29 @@
-# Add `~/bin` and ruby to the `$PATH`
-export PATH="$HOME/bin:$HOME/.local/share/gem/ruby/3.0.0/bin:/Users/thanpolas/.foundry/bin:$PATH";
+# Add `~/bin` and ruby user-gems to the `$PATH`. Ruby 3.2.x → gem API dir is "3.2.0".
+export PATH="$HOME/bin:$HOME/.local/share/gem/ruby/3.2.0/bin:$PATH";
 
-# Solana executable path
-export PATH="$PATH:$HOME/.local/share/solana/install/active_release/bin";
-
-# Codex execution path
-export PATH="$PATH:/Applications/Codex.app/Contents/Resources"
-
+# Per-machine tool paths — gated with -d so a machine missing the tool silently skips
+# it (these dotfiles are shared across jolly/tigerpaw; not every tool is on every box).
+# Foundry (EVM)
+[ -d "$HOME/.foundry/bin" ] && export PATH="$HOME/.foundry/bin:$PATH";
+# Solana CLI
+[ -d "$HOME/.local/share/solana/install/active_release/bin" ] && export PATH="$PATH:$HOME/.local/share/solana/install/active_release/bin";
+# Codex
+[ -d "/Applications/Codex.app/Contents/Resources" ] && export PATH="$PATH:/Applications/Codex.app/Contents/Resources";
 # Bun
-export PATH="$PATH:/Users/thanpolas/.bun/bin"
+[ -d "$HOME/.bun/bin" ] && export PATH="$PATH:$HOME/.bun/bin";
+# gcloud SDK
+[ -d "$HOME/Projects/clients/gcli/google-cloud-sdk/bin" ] && export PATH="$PATH:$HOME/Projects/clients/gcli/google-cloud-sdk/bin";
 
-# Google CLI
-export PATH="$PATH:/Users/thanpolas/Projects/clients/gcli/google-cloud-sdk/bin"
+# local bin
+export PATH="$PATH:$HOME/.local/bin";
+
 
 # Add homebrew path
-if [ ${SHELL} = "/opt/homebrew/bin/bash" ]; then
-  export PATH="$HOME/bin:/opt/homebrew/opt/ruby/bin:/opt/homebrew/lib/ruby/gems/3.0.0/bin:$PATH";
+if [ "${SHELL}" = "/opt/homebrew/bin/bash" ]; then
+  export PATH="$HOME/bin:/opt/homebrew/opt/ruby/bin:/opt/homebrew/lib/ruby/gems/3.2.0/bin:$PATH";
   eval "$(/opt/homebrew/bin/brew shellenv)";
 else
-  export PATH="$HOME/bin:/usr/local/opt/ruby/bin:/usr/local/lib/ruby/gems/3.0.0/bin:$PATH";
+  export PATH="$HOME/bin:/usr/local/opt/ruby/bin:/usr/local/lib/ruby/gems/3.2.0/bin:$PATH";
   eval "$(/usr/local/bin/brew shellenv)";
 fi;
 
@@ -26,9 +31,6 @@ fi;
 source $(brew --prefix)/opt/chruby/share/chruby/chruby.sh
 source $(brew --prefix)/opt/chruby/share/chruby/auto.sh
 chruby ruby-3.2.2
-
-# Add RVM to PATH for scripting. Make sure this is the last PATH variable change.
-export PATH="$PATH:$HOME/.rvm/bin"
 
 # Starting on macOS Catalina (10.15) the headers used for Ruby have been moved
 # from their previous location which results in some gems, including Jekyll to
@@ -38,8 +40,6 @@ export SDKROOT=$(xcrun --show-sdk-path)
 
 # Suppress the "The default interactive shell is now zsh." OSX message
 export BASH_SILENCE_DEPRECATION_WARNING=1
-
-[[ -s "$HOME/.rvm/scripts/rvm" ]] && source "$HOME/.rvm/scripts/rvm" # Load RVM into a shell session *as a function*
 
 # Load the shell dotfiles, and then some:
 # * ~/.path can be used to extend `$PATH`.
