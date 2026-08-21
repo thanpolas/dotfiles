@@ -11,6 +11,23 @@ elif infocmp xterm-256color >/dev/null 2>&1; then
 	export TERM='xterm-256color';
 fi;
 
+# The dirty-state checks in prompt_git cost one filesystem round-trip per
+# tracked file. On a local disk that is ~0.1s for a 6k-file repo and nobody
+# notices; on a network mount every stat is a network round-trip, which put a
+# 6k-file repo under /Volumes at ~9s of lag on *every* prompt. `git
+# update-index --really-refresh` was the bulk of it: "really" means discard
+# cached stat info and re-stat unconditionally, so the result can never be
+# served from the SMB attribute cache.
+#
+# Pure bash string match, no subprocess and no stat, so repos on local disk
+# pay literally nothing for this check and keep their full flags.
+prompt_git_slow_fs() {
+	case "${PWD}" in
+		/Volumes/*|/net/*) return 0 ;;
+	esac
+	return 1
+}
+
 prompt_git() {
 	local s='';
 	local branchName='';
@@ -19,7 +36,7 @@ prompt_git() {
 	if [ $(git rev-parse --is-inside-work-tree &>/dev/null; echo "${?}") == '0' ]; then
 
 		# check if the current directory is in .git before running git checks
-		if [ "$(git rev-parse --is-inside-git-dir 2> /dev/null)" == 'false' ]; then
+		if [ "$(git rev-parse --is-inside-git-dir 2> /dev/null)" == 'false' ] && ! prompt_git_slow_fs; then
 
 			# Ensure the index is up to date.
 			git update-index --really-refresh -q &>/dev/null;
@@ -53,7 +70,15 @@ prompt_git() {
 			git rev-parse --short HEAD 2> /dev/null || \
 			echo '(unknown)')";
 
-		[ -n "${s}" ] && s=" [${s}]";
+		# On a slow fs the flags above were never computed, so an empty `s` does
+		# NOT mean clean. Mark the state unknown instead — a dirty repo that
+		# renders as clean is worse than a slow prompt. `~` is deliberately
+		# distinct from the four real flags (+ ! ? $).
+		if prompt_git_slow_fs; then
+			s=' [~]';
+		else
+			[ -n "${s}" ] && s=" [${s}]";
+		fi;
 
 		echo -e "${1}${branchName}${2}${s}";
 	else
