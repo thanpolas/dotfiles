@@ -571,3 +571,96 @@ EOF
   echo "Backup:  ${f}.bak"
   echo "Reload VSCode: Cmd+Shift+P -> Developer: Reload Window"
 }
+
+
+# Find Claude Code sessions by content across every project, not just $PWD.
+# `claude -c` and the /resume picker are scoped to the current directory, so a session
+# started in a git worktree (`claude -w`) is invisible from the repo root even though its
+# transcript is intact under a separate projects/ key. Ranks matches by hit count and
+# prints a resume line that cd's into the session's original cwd first — resuming a
+# worktree session from the wrong tree would land edits on the wrong branch.
+# Usage: ccr <query> [-r]      -r resumes the top hit immediately.
+function ccr() {
+  local query="" resume=0 arg
+  for arg in "$@"; do
+    case "$arg" in
+      -r|--resume) resume=1 ;;
+      *) query="$arg" ;;
+    esac
+  done
+  if [ -z "$query" ]; then
+    echo "Usage: ccr <query> [-r]"
+    return 1
+  fi
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "ERROR: ccr needs jq (brew install jq)"
+    return 1
+  fi
+  local base="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects"
+  if [ ! -d "$base" ]; then
+    echo "ERROR: no Claude projects dir at ${base}"
+    return 1
+  fi
+
+  shopt -s nullglob
+  local f id hits title cwd size mtime rows=""
+  # */*.jsonl deliberately excludes the deeper subagents/ and tool-results/ payloads.
+  for f in "$base"/*/*.jsonl; do
+    hits=$(grep -ic -- "$query" "$f" 2>/dev/null)
+    [ "${hits:-0}" -eq 0 ] && continue
+    id="${f##*/}"
+    id="${id%.jsonl}"
+    title=$(jq -r '.customTitle // empty' "${f%.jsonl}/custom-title.json" 2>/dev/null)
+    [ -z "$title" ] && title=$(jq -r 'select(.type=="ai-title") | .aiTitle' "$f" 2>/dev/null | tail -1)
+    [ -z "$title" ] && title=$(jq -r 'select(.type=="user" and (.isMeta // false) == false) | .message.content | if type=="string" then . else ([.[] | select(.type=="text") | .text] | join(" ")) end' "$f" 2>/dev/null | grep -v '^[[:space:]]*$' | head -1)
+    [ -z "$title" ] && title="(untitled)"
+    # Slash-command sessions open with <command-message>/<command-args> markup.
+    title=$(printf '%s' "$title" | tr -d '"' | tr '\n\t' '  ' | sed -e 's/<[^>]*>/ /g' -e 's/  */ /g' -e 's/^ //' | cut -c1-46)
+    # Last user record, not the first: a resumed session carries its original cwd up front.
+    cwd=$(jq -r 'select(.type=="user") | .cwd // empty' "$f" 2>/dev/null | tail -1)
+    size=$(du -h "$f" | cut -f1 | tr -d ' ')
+    mtime=$(date -r "$f" "+%b %d %H:%M")
+    rows+="${hits}|${id}|${title}|${cwd}|${size}|${mtime}"$'\n'
+  done
+
+  rows=$(printf '%s' "$rows" | grep . | sort -t'|' -k1,1rn)
+  if [ -z "$rows" ]; then
+    echo "No sessions matching '${query}'."
+    return 1
+  fi
+
+  if [ "$resume" -eq 1 ]; then
+    local rid rcwd
+    IFS='|' read -r _ rid _ rcwd _ _ <<< "$(printf '%s\n' "$rows" | head -1)"
+    if [ -n "$rcwd" ] && [ -d "$rcwd" ]; then
+      cd "$rcwd" || return 1
+    fi
+    echo "Resuming ${rid} in ${PWD}"
+    claude -r "$rid"
+    return
+  fi
+
+  local shown=0 total
+  total=$(printf '%s\n' "$rows" | wc -l | tr -d ' ')
+  while IFS='|' read -r hits id title cwd size mtime; do
+    [ "$shown" -ge 12 ] && break
+    printf '%-46s %5s hits  %6s  %s\n' "$title" "$hits" "$size" "$mtime"
+    if [ -z "$cwd" ]; then
+      printf '  cwd     (unknown)\n'
+      printf '  resume  claude -r %s\n\n' "$id"
+    elif [ ! -d "$cwd" ]; then
+      printf '  cwd     %s  (gone)\n' "${cwd/#$HOME/~}"
+      printf '  resume  claude -r %s\n\n' "$id"
+    elif [ "$cwd" = "$PWD" ]; then
+      printf '  cwd     %s\n' "${cwd/#$HOME/~}"
+      printf '  resume  claude -r %s\n\n' "$id"
+    else
+      printf '  cwd     %s\n' "${cwd/#$HOME/~}"
+      printf '  resume  cd %s && claude -r %s\n\n' "$cwd" "$id"
+    fi
+    shown=$((shown + 1))
+  done <<< "$rows"
+  if [ "$total" -gt "$shown" ]; then
+    printf '... %s more match(es); narrow the query.\n' "$((total - shown))"
+  fi
+}
