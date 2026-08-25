@@ -572,24 +572,34 @@ EOF
   echo "Reload VSCode: Cmd+Shift+P -> Developer: Reload Window"
 }
 
-
 # Find Claude Code sessions by content across every project, not just $PWD.
 # `claude -c` and the /resume picker are scoped to the current directory, so a session
 # started in a git worktree (`claude -w`) is invisible from the repo root even though its
-# transcript is intact under a separate projects/ key. Ranks matches by hit count and
-# prints a resume line that cd's into the session's original cwd first — resuming a
-# worktree session from the wrong tree would land edits on the wrong branch.
-# Usage: ccr <query> [-r]      -r resumes the top hit immediately.
+# transcript is intact under a separate projects/ key.
+# Sorted newest-first: hit count measures how chatty a transcript is, not how relevant it
+# is — a worktree path like .../worktrees/STAP-1732 puts the query in nearly every record.
+# `claude -r <id>` resolves a session id globally, so resume runs in whatever cwd you are
+# in; the printed cwd is only where the session last ran.
+# Usage: ccr <query> [-r [N]] [--hits] [--all]
+#   -r [N]   resume the Nth listed session (default 1) right here, in $PWD
+#   --hits   rank by hit count instead of recency
+#   --all    print every match, not just the first 12
 function ccr() {
-  local query="" resume=0 arg
-  for arg in "$@"; do
-    case "$arg" in
-      -r|--resume) resume=1 ;;
-      *) query="$arg" ;;
+  local query="" resume=0 pick=1 bymtime=1 limit=12 arg
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -r|--resume)
+        resume=1
+        if [ -n "$query" ] && [[ "${2:-}" =~ ^[0-9]+$ ]]; then pick="$2"; shift; fi
+        ;;
+      --hits) bymtime=0 ;;
+      --all) limit=100000 ;;
+      *) query="$1" ;;
     esac
+    shift
   done
   if [ -z "$query" ]; then
-    echo "Usage: ccr <query> [-r]"
+    echo "Usage: ccr <query> [-r [N]] [--hits] [--all]"
     return 1
   fi
   if ! command -v jq >/dev/null 2>&1; then
@@ -602,65 +612,93 @@ function ccr() {
     return 1
   fi
 
+  # One jq pass per transcript, emitting tagged records; separate passes over multi-MB
+  # files cost more than the awk/grep slicing below.
+  local prog='fromjson?
+    | (if .type=="custom-title" then (.customTitle // "")
+       elif .type=="agent-name" then (.agentName // "")
+       elif .type=="ai-title"    then (.aiTitle // "")
+       else null end) as $n
+    | if $n != null then (if $n=="" then empty else "T\t" + ($n|gsub("[\n\t]";" ")) end)
+      elif .type=="user" then
+        ("C\t" + (.cwd // "")),
+        (if (.isMeta // false) then empty
+         else ((.message.content // "")
+               | if type=="array" then ([.[] | select(.type=="text") | .text] | join(" "))
+                 elif type=="string" then . else "" end
+               | gsub("[\n\t]";" ")
+               | sub("^ +";"")
+               | if .=="" then empty else "U\t" + . end)
+         end)
+      else empty end'
+
+  local nullglob_was; nullglob_was=$(shopt -p nullglob)
   shopt -s nullglob
-  local f id hits title cwd size mtime rows=""
+  local f id hits title cwd size mtime epoch meta rows=""
   # */*.jsonl deliberately excludes the deeper subagents/ and tool-results/ payloads.
   for f in "$base"/*/*.jsonl; do
     hits=$(grep -ic -- "$query" "$f" 2>/dev/null)
     [ "${hits:-0}" -eq 0 ] && continue
-    id="${f##*/}"
-    id="${id%.jsonl}"
-    title=$(jq -r '.customTitle // empty' "${f%.jsonl}/custom-title.json" 2>/dev/null)
-    [ -z "$title" ] && title=$(jq -r 'select(.type=="ai-title") | .aiTitle' "$f" 2>/dev/null | tail -1)
-    [ -z "$title" ] && title=$(jq -r 'select(.type=="user" and (.isMeta // false) == false) | .message.content | if type=="string" then . else ([.[] | select(.type=="text") | .text] | join(" ")) end' "$f" 2>/dev/null | grep -v '^[[:space:]]*$' | head -1)
+    id="${f##*/}"; id="${id%.jsonl}"
+    meta=$(jq -Rr "$prog" "$f" 2>/dev/null)
+    # The session name lives in custom-title/agent-name records inside the transcript,
+    # not in the custom-title.json sidecar (which is absent for named sessions).
+    title=$(printf '%s\n' "$meta" | grep '^T	' | tail -1 | cut -f2-)
+    # Fall back to the opening prompt; strip the <command-message> markup slash commands add.
+    [ -z "$title" ] && title=$(printf '%s\n' "$meta" | grep '^U	' | head -1 | cut -f2- \
+      | sed -e 's/<[^>]*>/ /g' -e 's/  */ /g' -e 's/^ //')
     [ -z "$title" ] && title="(untitled)"
-    # Slash-command sessions open with <command-message>/<command-args> markup.
-    title=$(printf '%s' "$title" | tr -d '"' | tr '\n\t' '  ' | sed -e 's/<[^>]*>/ /g' -e 's/  */ /g' -e 's/^ //' | cut -c1-46)
+    title=$(printf '%s' "$title" | tr -d '|' | cut -c1-90)
     # Last user record, not the first: a resumed session carries its original cwd up front.
-    cwd=$(jq -r 'select(.type=="user") | .cwd // empty' "$f" 2>/dev/null | tail -1)
+    cwd=$(printf '%s\n' "$meta" | grep '^C	' | tail -1 | cut -f2-)
     size=$(du -h "$f" | cut -f1 | tr -d ' ')
     mtime=$(date -r "$f" "+%b %d %H:%M")
-    rows+="${hits}|${id}|${title}|${cwd}|${size}|${mtime}"$'\n'
+    epoch=$(stat -f %m "$f" 2>/dev/null || echo 0)
+    rows+="${epoch}|${hits}|${id}|${title}|${cwd}|${size}|${mtime}"$'\n'
   done
+  eval "$nullglob_was"
 
-  rows=$(printf '%s' "$rows" | grep . | sort -t'|' -k1,1rn)
+  if [ "$bymtime" -eq 1 ]; then
+    rows=$(printf '%s' "$rows" | grep . | sort -t'|' -k1,1rn)
+  else
+    rows=$(printf '%s' "$rows" | grep . | sort -t'|' -k2,2rn)
+  fi
   if [ -z "$rows" ]; then
     echo "No sessions matching '${query}'."
     return 1
   fi
 
   if [ "$resume" -eq 1 ]; then
-    local rid rcwd
-    IFS='|' read -r _ rid _ rcwd _ _ <<< "$(printf '%s\n' "$rows" | head -1)"
-    if [ -n "$rcwd" ] && [ -d "$rcwd" ]; then
-      cd "$rcwd" || return 1
+    local rid
+    IFS='|' read -r _ _ rid _ _ _ _ <<< "$(printf '%s\n' "$rows" | sed -n "${pick}p")"
+    if [ -z "$rid" ]; then
+      echo "No match #${pick}."
+      return 1
     fi
     echo "Resuming ${rid} in ${PWD}"
     claude -r "$rid"
     return
   fi
 
-  local shown=0 total
+  local shown=0 total n=0
   total=$(printf '%s\n' "$rows" | wc -l | tr -d ' ')
-  while IFS='|' read -r hits id title cwd size mtime; do
-    [ "$shown" -ge 12 ] && break
-    printf '%-46s %5s hits  %6s  %s\n' "$title" "$hits" "$size" "$mtime"
+  printf '%s session(s) matching %s — %s. "hits" = transcript lines containing the query.\n\n' \
+    "$total" "'${query}'" "$([ "$bymtime" -eq 1 ] && echo 'newest first' || echo 'most hits first')"
+  while IFS='|' read -r _ hits id title cwd size mtime; do
+    [ "$shown" -ge "$limit" ] && break
+    n=$((n + 1))
+    printf '%2d) %s\n' "$n" "$title"
     if [ -z "$cwd" ]; then
-      printf '  cwd     (unknown)\n'
-      printf '  resume  claude -r %s\n\n' "$id"
+      printf '    %s  %5s  %5s hits  cwd (unknown)\n' "$mtime" "$size" "$hits"
     elif [ ! -d "$cwd" ]; then
-      printf '  cwd     %s  (gone)\n' "${cwd/#$HOME/~}"
-      printf '  resume  claude -r %s\n\n' "$id"
-    elif [ "$cwd" = "$PWD" ]; then
-      printf '  cwd     %s\n' "${cwd/#$HOME/~}"
-      printf '  resume  claude -r %s\n\n' "$id"
+      printf '    %s  %5s  %5s hits  %s (gone)\n' "$mtime" "$size" "$hits" "${cwd/#$HOME/\~}"
     else
-      printf '  cwd     %s\n' "${cwd/#$HOME/~}"
-      printf '  resume  cd %s && claude -r %s\n\n' "$cwd" "$id"
+      printf '    %s  %5s  %5s hits  %s\n' "$mtime" "$size" "$hits" "${cwd/#$HOME/\~}"
     fi
+    printf '    claude -r %s\n\n' "$id"
     shown=$((shown + 1))
   done <<< "$rows"
   if [ "$total" -gt "$shown" ]; then
-    printf '... %s more match(es); narrow the query.\n' "$((total - shown))"
+    printf '... %s more match(es); narrow the query or pass --all.\n' "$((total - shown))"
   fi
 }
