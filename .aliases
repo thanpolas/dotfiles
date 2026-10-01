@@ -8,6 +8,10 @@ alias .....="cd ../../../.."
 alias ~="cd ~" # `cd` is probably faster to type though
 # alias -- -="cd -"  # Removed: causes snapshot parse errors in Claude Code bash shells
 
+
+# Stablepay
+alias deploy=~/Projects/clients/stablepay/tools/scripts/prod-release.sh -y -w
+
 # Shortcuts
 alias d="cd ~/Documents/Dropbox"
 alias dl="cd ~/Downloads"
