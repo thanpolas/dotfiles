@@ -10,7 +10,7 @@ alias ~="cd ~" # `cd` is probably faster to type though
 
 
 # Stablepay
-alias deploy=~/Projects/clients/stablepay/tools/scripts/prod-release.sh -y -w
+alias deploy="~/Projects/clients/stablepay/tools/scripts/prod-release.sh -y -w"
 
 # Shortcuts
 alias d="cd ~/Documents/Dropbox"
