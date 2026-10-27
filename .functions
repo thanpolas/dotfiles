@@ -580,12 +580,16 @@ EOF
 # is — a worktree path like .../worktrees/STAP-1732 puts the query in nearly every record.
 # `claude -r <id>` resolves a session id globally, so resume runs in whatever cwd you are
 # in; the printed cwd is only where the session last ran.
-# Usage: ccr <query> [-r [N]] [--hits] [--all]
-#   -r [N]   resume the Nth listed session (default 1) right here, in $PWD
-#   --hits   rank by hit count instead of recency
-#   --all    print every match, not just the first 12
+# A ticket-key query (STAP-2442) lists only the sessions that own the ticket — its key in
+# the title, the cwd (worktrees/STAP-2442) or the git branch — since every planning and
+# sibling-ticket session mentions it too. Falls back to plain mentions when none owns it.
+# Usage: ccr <query> [-r [N]] [--hits] [--all] [--mentions]
+#   -r [N]      resume the Nth listed session (default 1) right here, in $PWD
+#   --hits      rank by hit count instead of recency
+#   --all       print every match, not just the first 12
+#   --mentions  for a ticket key, list every session mentioning it, not just its owners
 function ccr() {
-  local query="" resume=0 pick=1 bymtime=1 limit=12 arg
+  local query="" resume=0 pick=1 bymtime=1 limit=12 mentions=0 ticket=0 arg
   while [ $# -gt 0 ]; do
     case "$1" in
       -r|--resume)
@@ -594,14 +598,16 @@ function ccr() {
         ;;
       --hits) bymtime=0 ;;
       --all) limit=100000 ;;
+      --mentions) mentions=1 ;;
       *) query="$1" ;;
     esac
     shift
   done
   if [ -z "$query" ]; then
-    echo "Usage: ccr <query> [-r [N]] [--hits] [--all]"
+    echo "Usage: ccr <query> [-r [N]] [--hits] [--all] [--mentions]"
     return 1
   fi
+  [[ "$query" =~ ^[A-Za-z][A-Za-z0-9]*-[0-9]+$ ]] && ticket=1
   if ! command -v jq >/dev/null 2>&1; then
     echo "ERROR: ccr needs jq (brew install jq)"
     return 1
@@ -622,6 +628,7 @@ function ccr() {
     | if $n != null then (if $n=="" then empty else "T\t" + ($n|gsub("[\n\t]";" ")) end)
       elif .type=="user" then
         ("C\t" + (.cwd // "")),
+        ("B\t" + (.gitBranch // "")),
         (if (.isMeta // false) then empty
          else ((.message.content // "")
                | if type=="array" then ([.[] | select(.type=="text") | .text] | join(" "))
@@ -634,10 +641,12 @@ function ccr() {
 
   local nullglob_was; nullglob_was=$(shopt -p nullglob)
   shopt -s nullglob
-  local f id hits title cwd size mtime epoch meta rows=""
+  local f id hits title cwd size mtime epoch meta row rows="" mrows=""
+  # -w keeps STAP-244 from matching STAP-2442.
+  local word=""; [ "$ticket" -eq 1 ] && word="-w"
   # */*.jsonl deliberately excludes the deeper subagents/ and tool-results/ payloads.
   for f in "$base"/*/*.jsonl; do
-    hits=$(grep -ic -- "$query" "$f" 2>/dev/null)
+    hits=$(grep -ic $word -- "$query" "$f" 2>/dev/null)
     [ "${hits:-0}" -eq 0 ] && continue
     id="${f##*/}"; id="${id%.jsonl}"
     meta=$(jq -Rr "$prog" "$f" 2>/dev/null)
@@ -648,21 +657,34 @@ function ccr() {
     [ -z "$title" ] && title=$(printf '%s\n' "$meta" | grep '^U	' | head -1 | cut -f2- \
       | sed -e 's/<[^>]*>/ /g' -e 's/  */ /g' -e 's/^ //')
     [ -z "$title" ] && title="(untitled)"
-    title=$(printf '%s' "$title" | tr -d '|' | cut -c1-90)
     # Last user record, not the first: a resumed session carries its original cwd up front.
     cwd=$(printf '%s\n' "$meta" | grep '^C	' | tail -1 | cut -f2-)
     size=$(du -h "$f" | cut -f1 | tr -d ' ')
     mtime=$(date -r "$f" "+%b %d %H:%M")
     epoch=$(stat -f %m "$f" 2>/dev/null || echo 0)
-    rows+="${epoch}|${hits}|${id}|${title}|${cwd}|${size}|${mtime}"$'\n'
+    row="${epoch}|${hits}|${id}|$(printf '%s' "$title" | tr -d '|' | cut -c1-90)|${cwd}|${size}|${mtime}"$'\n'
+    if [ "$ticket" -eq 1 ] && [ "$mentions" -eq 0 ] \
+      && ! { printf '%s\n' "$title"; printf '%s\n' "$meta" | grep '^[CB]	' | cut -f2-; } \
+        | grep -qiE "(^|[^[:alnum:]])${query}([^[:alnum:]]|$)"; then
+      mrows+="$row"
+    else
+      rows+="$row"
+    fi
   done
   eval "$nullglob_was"
 
-  if [ "$bymtime" -eq 1 ]; then
-    rows=$(printf '%s' "$rows" | grep . | sort -t'|' -k1,1rn)
-  else
-    rows=$(printf '%s' "$rows" | grep . | sort -t'|' -k2,2rn)
+  local others=0 scope="matching"
+  if [ "$ticket" -eq 1 ] && [ "$mentions" -eq 0 ]; then
+    if [ -z "$rows" ]; then
+      rows="$mrows"
+      [ -n "$rows" ] && echo "No session owns ${query}; listing sessions that mention it."
+    else
+      scope="owning"
+      others=$(printf '%s' "$mrows" | grep -c .)
+    fi
   fi
+  local sortkey='-k1,1rn'; [ "$bymtime" -eq 0 ] && sortkey='-k2,2rn'
+  rows=$(printf '%s' "$rows" | grep . | sort -t'|' $sortkey)
   if [ -z "$rows" ]; then
     echo "No sessions matching '${query}'."
     return 1
@@ -682,8 +704,8 @@ function ccr() {
 
   local shown=0 total n=0
   total=$(printf '%s\n' "$rows" | wc -l | tr -d ' ')
-  printf '%s session(s) matching %s — %s. "hits" = transcript lines containing the query.\n\n' \
-    "$total" "'${query}'" "$([ "$bymtime" -eq 1 ] && echo 'newest first' || echo 'most hits first')"
+  printf '%s session(s) %s %s — %s. "hits" = transcript lines containing the query.\n\n' \
+    "$total" "$scope" "'${query}'" "$([ "$bymtime" -eq 1 ] && echo 'newest first' || echo 'most hits first')"
   while IFS='|' read -r _ hits id title cwd size mtime; do
     [ "$shown" -ge "$limit" ] && break
     n=$((n + 1))
@@ -700,5 +722,8 @@ function ccr() {
   done <<< "$rows"
   if [ "$total" -gt "$shown" ]; then
     printf '... %s more match(es); narrow the query or pass --all.\n' "$((total - shown))"
+  fi
+  if [ "$others" -gt 0 ]; then
+    printf '(%s other session(s) only mention %s; pass --mentions to list them.)\n' "$others" "$query"
   fi
 }
