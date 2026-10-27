@@ -28,7 +28,9 @@ prompt_git_slow_fs() {
 	return 1
 }
 
-prompt_git() {
+# Prints "<branch> <flags>" on one line, or nothing outside a Git repository.
+# Only ever run through prompt_git, which puts a time limit on it.
+prompt_git_state() {
 	local s='';
 	local branchName='';
 
@@ -75,15 +77,41 @@ prompt_git() {
 		# renders as clean is worse than a slow prompt. `~` is deliberately
 		# distinct from the four real flags (+ ! ? $).
 		if prompt_git_slow_fs; then
-			s=' [~]';
-		else
-			[ -n "${s}" ] && s=" [${s}]";
+			s='~';
 		fi;
 
-		echo -e "${1}${branchName}${2}${s}";
-	else
+		printf '%s %s\n' "${branchName}" "${s}";
+	fi;
+}
+
+# Any git command can block indefinitely when the repo lives in iCloud Drive
+# and files under .git are evicted ("dataless"): reading one makes the kernel
+# wait for iCloud to download it, and that wait ignores Ctrl+C. Since PS1 runs
+# this on every prompt, the shell would sit there with no way out.
+#
+# So the git work runs in a background process substitution and we give it one
+# second. On timeout we print N/A wherever git state would go and leave the
+# probe behind; we never wait on it, because it can't be interrupted anyway.
+prompt_git() {
+	local branchName='';
+	local s='';
+	local status;
+
+	IFS=' ' read -r -t 1 branchName s < <(prompt_git_state);
+	status="${?}";
+
+	if [ "${status}" -gt 128 ]; then
+		# Stop the probe from starting more git commands. One already blocked on
+		# iCloud exits when its read returns, releasing any index.lock it holds.
+		kill "${!}" 2>/dev/null;
+		branchName='N/A';
+		s='N/A';
+	elif [ -z "${branchName}" ]; then
 		return;
 	fi;
+
+	[ -n "${s}" ] && s=" [${s}]";
+	echo -e "${1}${branchName}${2}${s}";
 }
 
 if tput setaf 1 &> /dev/null; then
