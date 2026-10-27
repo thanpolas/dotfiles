@@ -21,16 +21,22 @@ export PATH="$PATH:$HOME/.local/bin";
 # Add homebrew path
 if [ "${SHELL}" = "/opt/homebrew/bin/bash" ]; then
   export PATH="$HOME/bin:/opt/homebrew/opt/ruby/bin:/opt/homebrew/lib/ruby/gems/3.2.0/bin:$PATH";
-  eval "$(/opt/homebrew/bin/brew shellenv)";
+  BREW_BIN=/opt/homebrew/bin/brew;
 else
   export PATH="$HOME/bin:/usr/local/opt/ruby/bin:/usr/local/lib/ruby/gems/3.2.0/bin:$PATH";
-  eval "$(/usr/local/bin/brew shellenv)";
+  BREW_BIN=/usr/local/bin/brew;
 fi;
+# brew refuses to run from an unreadable cwd (e.g. a TCC-protected ~/Documents
+# folder the terminal app has no access to), so run shellenv from `/`.
+eval "$(cd / && "$BREW_BIN" shellenv)";
+unset BREW_BIN;
 
 # 21/Oct/2025 Add chruby config for jekyll
-source $(brew --prefix)/opt/chruby/share/chruby/chruby.sh
-source $(brew --prefix)/opt/chruby/share/chruby/auto.sh
-chruby ruby-3.2.2
+if [ -f "$HOMEBREW_PREFIX/opt/chruby/share/chruby/chruby.sh" ]; then
+  source "$HOMEBREW_PREFIX/opt/chruby/share/chruby/chruby.sh";
+  source "$HOMEBREW_PREFIX/opt/chruby/share/chruby/auto.sh";
+  chruby ruby-3.2.2;
+fi;
 
 # Starting on macOS Catalina (10.15) the headers used for Ruby have been moved
 # from their previous location which results in some gems, including Jekyll to
@@ -66,8 +72,8 @@ for option in autocd globstar; do
 done;
 
 # Add tab completion for many Bash commands
-if which brew &> /dev/null && [ -f "$(brew --prefix)/share/bash-completion/bash_completion" ]; then
-	source "$(brew --prefix)/share/bash-completion/bash_completion";
+if which brew &> /dev/null && [ -f "$HOMEBREW_PREFIX/share/bash-completion/bash_completion" ]; then
+	source "$HOMEBREW_PREFIX/share/bash-completion/bash_completion";
 elif [ -f /etc/bash_completion ]; then
 	source /etc/bash_completion;
 fi;
@@ -95,7 +101,7 @@ complete -o "nospace" -W "Contacts Calendar Dock Finder Mail Safari iTunes Syste
 # Move next only if `homebrew` is installed
 if command -v brew >/dev/null 2>&1; then
 	# Load rupa's z if installed
-	[ -f $(brew --prefix)/etc/profile.d/z.sh ] && source $(brew --prefix)/etc/profile.d/z.sh
+	[ -f "$HOMEBREW_PREFIX/etc/profile.d/z.sh" ] && source "$HOMEBREW_PREFIX/etc/profile.d/z.sh"
 fi
 
 # Load NVM last, after every other PATH mutation above (Homebrew's shellenv,
